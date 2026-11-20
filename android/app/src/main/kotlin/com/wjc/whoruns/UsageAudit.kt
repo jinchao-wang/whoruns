@@ -25,6 +25,15 @@ object UsageAudit {
 
     private const val BACKGROUND_LOCATION = "android.permission.ACCESS_BACKGROUND_LOCATION"
 
+    /**
+     * 「使用情况访问」这个 AppOp 的名字。
+     *
+     * 直接写字面量而不是用 `AppOpsManager.OPSTR_GET_USAGE_STATS`：
+     * 不同 Android 版本里这个常量的公开程度不一样，
+     * 写字面量可以保证任何 compileSdk 都能编过（名字本身是稳定的）。
+     */
+    private const val OP_GET_USAGE_STATS = "android:get_usage_stats"
+
     /** 用户有没有给「使用情况访问权限」。 */
     fun hasUsageAccess(context: Context): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
@@ -32,7 +41,7 @@ object UsageAudit {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     val mode = appOps.unsafeCheckOpNoThrow(
-                        AppOpsManager.OPSTR_GET_USAGE_STATS,
+                        OP_GET_USAGE_STATS,
                         Process.myUid(),
                         context.packageName,
                     )
@@ -267,11 +276,8 @@ object UsageAudit {
             )
             for ((transport, prefix) in transports) {
                 val buckets = try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        manager.queryStatsForDevice(transport, "", begin, end)
-                    } else {
-                        manager.queryStatsForDevice(begin, end)
-                    }
+                    // minSdk 是 24，四参数版本从 API 24 就有。
+                    manager.queryStatsForDevice(transport, "", begin, end)
                 } catch (t: Throwable) {
                     // 部分 ROM/系统版本不给普通应用读分应用流量，直接跳过。
                     continue
