@@ -1,0 +1,68 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.build/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+.idea/
+*.iml
+.vscode/
+
+# Android —— 平台脚手架不入库，CI 里由 `flutter create` 重新生成。
+# 保留 android/app/src 下我们自己写的部分（Manifest + Kotlin 源码 + 单测）。
+android/.gradle/
+android/local.properties
+android/.gitignore
+android/build.gradle
+android/build.gradle.kts
+android/settings.gradle
+android/settings.gradle.kts
+android/gradle.properties
+android/gradle/
+android/app/build.gradle
+android/app/build.gradle.kts
+android/app/src/debug/
+android/app/src/profile/
+android/app/src/main/res/
+android/app/src/main/java/
+*.keystore
+*.jks
+
+# iOS —— 只保留我们改过的 AppDelegate.swift 和 Info.plist，
+# Xcode 工程和 CocoaPods 依赖不入库。
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Runner/GeneratedPluginRegistrant.h
+ios/Runner/GeneratedPluginRegistrant.m
+ios/Runner.xcworkspace/xcshareddata/
+ios/Runner.xcodeproj/
+ios/Runner.xcworkspace/
+ios/RunnerTests/
+ios/Runner/Base.lproj/
+ios/Runner/Assets.xcassets/
+ios/.gitignore
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# 本机密钥（授权码私钥就在这儿，绝对不能进仓库）
+.whoruns-secrets/
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 本机 AI 工具的权限白名单，属于个人环境，不应该进版本库
+.claude/
+
+# JVM 崩溃日志。内存不足时 Gradle 会把这玩意儿扔在 android/ 下面，
+# 纯属本机环境产物。
+hs_err_pid*.log
+replay_pid*.log

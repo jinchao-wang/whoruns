@@ -1,0 +1,94 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - 'lib/**'
+      - 'test/**'
+      - 'tool/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build-ios.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build 谁在偷跑 iOS unsigned IPA
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.8'
+          cache: true
+
+      # 仓库里只跟踪 ios/Runner 里我们改过的两个文件，
+      # Xcode 工程本身不入库，用 `flutter create` 重新生成。
+      - name: Preserve custom source
+        run: |
+          mkdir -p /tmp/whoruns_src/lib
+          cp -r lib/. /tmp/whoruns_src/lib/
+          mkdir -p /tmp/whoruns_src/ios
+          cp ios/Runner/AppDelegate.swift /tmp/whoruns_src/ios/
+          cp ios/Runner/Info.plist /tmp/whoruns_src/ios/
+          cp pubspec.yaml /tmp/whoruns_src/pubspec.yaml
+
+      - name: Scaffold missing platform folders
+        run: flutter create --platforms=ios --project-name whoruns --org com.wjc .
+
+      - name: Restore custom source
+        run: |
+          rm -rf lib
+          mkdir -p lib
+          cp -r /tmp/whoruns_src/lib/. lib/
+          cp /tmp/whoruns_src/pubspec.yaml pubspec.yaml
+          cp /tmp/whoruns_src/ios/AppDelegate.swift ios/Runner/AppDelegate.swift
+          cp /tmp/whoruns_src/ios/Info.plist ios/Runner/Info.plist
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: |
+          flutter analyze --no-pub > analyze.txt 2>&1 && code=0 || code=$?
+          cat analyze.txt
+          msg=$(tail -c 3000 analyze.txt | tr '\n\r' '  ' | sed 's/%/%25/g')
+          echo "::error title=flutter analyze::${msg}"
+          exit $code
+
+      - name: Test
+        run: |
+          flutter test > test.txt 2>&1 && code=0 || code=$?
+          cat test.txt
+          msg=$(tail -c 3000 test.txt | tr '\n\r' '  ' | sed 's/%/%25/g')
+          echo "::error title=flutter test::${msg}"
+          exit $code
+
+      # 没签名：CI 里没有证书，出来的 IPA 需要自己签名才能装。
+      # 要真机安装的话，在仓库设置里加 APPLE_CERTIFICATE 等 secret，
+      # 再把这一步换成 `flutter build ipa --release`。
+      - name: Build iOS release (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p build/ios/ipa/Payload
+          ditto build/ios/iphoneos/Runner.app build/ios/ipa/Payload/Runner.app
+          cd build/ios/ipa
+          zip -qry whoruns-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whoruns-ios-unsigned-ipa
+          path: build/ios/ipa/whoruns-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14

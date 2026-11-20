@@ -1,0 +1,66 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        使用情况访问权限：读各 App 的前台/后台时长、活动事件、屏幕亮灭。
+        这是本 App 的立身之本 —— 没有它就看不到「谁在偷跑」。
+        它属于「特殊权限」，只能跳系统设置页让用户手动开。
+    -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!--
+        包可见性：要把所有 App 的用量都算进来，必须能看到全部包。
+        Android 11 起默认只能看到一部分包，不声明这个就等于漏掉一半的偷跑。
+    -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- 网络状态：读分 App 的流量消耗。 -->
+    <uses-permission android:name="android.permission.READ_NETWORK_STATE" />
+
+    <!-- Android 13 起，发告警通知要用户点头。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 开机后重排审计闹钟。 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:label="谁在偷跑"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <meta-data android:name="flutterEmbedding" android:value="2" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 定期审计闹钟的接收器。 -->
+        <receiver
+            android:name=".AuditAlarmReceiver"
+            android:exported="false" />
+
+        <!-- 开机后重排闹钟。 -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
