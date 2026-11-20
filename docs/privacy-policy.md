@@ -21,9 +21,9 @@
 | 1 | 各 App 的前台时长、后台时长 | `UsageStatsManager.queryUsageStats()` → `UsageStats.getTotalTimeInForeground()` / `getTotalTimeInBackground()` | 计算「后台驻留」时长，算偷跑指数 | 否 |
 | 2 | 活动事件：某个 App 何时被启动到前台、是否抢了焦点、是否在息屏状态下启动 | `UsageStatsManager.queryEvents()` → `UsageEvents.Event`（事件类型 `ACTIVITY_STARTED` / `ACTIVITY_RESUMED` / `ACTIVITY_PAUSED` / `ACTIVITY_STOPPED` / `SCREEN_INTERACTIVE` / `SCREEN_NON_INTERACTIVE` / `USER_PRESENT` / `USER_UNLOCKED`） | 判定「息屏启动」「抢占焦点」这两类硬证据 | 否 |
 | 3 | 屏幕亮灭事件 | 同上，`SCREEN_INTERACTIVE` / `SCREEN_NON_INTERACTIVE` | 判断事件发生时屏幕是开还是关 | 否 |
-| 4 | 分 App 的移动数据流量（部分 ROM 读不到） | `NetworkStatsManager.queryStatsForDevice()`，区分 `NetworkCapabilities.TRANSPORT_CELLULAR`（移动数据）与 `TRANSPORT_WIFI` | 计算「流量偷跑」 | 否 |
+| 4 | 分 App 的流量消耗（移动 + Wi-Fi 合计，部分 ROM 读不到） | `NetworkStatsManager.queryStatsForUid(uid, begin, end)` | 计算「流量偷跑」 | 否 |
 | 5 | 各 App 的**权限声明与授予状态**，尤其是后台定位权限 `ACCESS_BACKGROUND_LOCATION` | `PackageManager.getPackageInfo(package, PackageManager.GET_PERMISSIONS)`、`PackageManager.checkPermission()` | 标出哪些 App 持有「始终允许」的后台定位权限 | 否 |
-| 6 | 本 App 自己有没有拿到「使用情况访问权限」 | `AppOpsManager.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, …)` | 判断能不能开始采集 | 否 |
+| 6 | 本 App 自己有没有拿到「使用情况访问权限」 | `AppOpsManager.unsafeCheckOpNoThrow("android:get_usage_stats", …)` | 判断能不能开始采集 | 否 |
 | 7 | 本机健康状态：电量、是否充电、存储余量、温度状态 | `BatteryManager`、`StatFs`、`PowerManager.getCurrentThermalStatus()` | 本机健康自检（iOS 版的主要功能） | 否 |
 | 8 | 设备指纹（仅在你主动使用「绑定设备」时才有意义） | `Settings.Secure.ANDROID_ID` 与机型信息拼接后做 SHA-256 | 让授权码绑定到这台设备，避免一个码被到处用 | 否 |
 
@@ -121,7 +121,7 @@
 | 你想做的事 | 怎么做 |
 |---|---|
 | **查看本 App 掌握的全部数据** | 首页「偷跑榜」与各 App 详情页，展示了全部采集项：时长、次数、流量、权限状态、每一条证据的时间和描述 |
-| **导出数据** | 首页右上角分享图标 → 导出 CSV，文件写到 App 文档目录。CSV 包含：应用名、包名、偷跑指数、等级、自启次数、息屏启动次数、抢焦点次数、前台时长（分钟）、后台时长（分钟）、移动流量（MB）、是否有后台定位权限、证据条数 |
+| **导出数据** | 首页右上角分享图标 → 导出 CSV，文件写到 App 文档目录。CSV 包含：应用名、包名、偷跑指数、等级、自启次数、息屏启动次数、抢焦点次数、前台时长（分钟）、后台时长（分钟）、流量（MB）、是否有后台定位权限、证据条数 |
 | **把某个 App 移出视野** | App 详情页 → 「加进白名单（别再提醒我）」。白名单只是本机的一个标记，不影响系统里该 App 的任何权限 |
 | **删除授权** | 设置页 → 「解除授权」。授权码与设备指纹立刻从本机删除，可随时重新输入授权码激活 |
 | **删除白名单** | 设置页 → 白名单列表 → 「移出白名单」 |

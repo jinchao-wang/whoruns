@@ -58,7 +58,8 @@ utils/scoring.dart computeScore() → 偷跑指数 0-100
 另外两条采集线是独立的：
 
 - `UsageStatsManager.queryUsageStats(INTERVAL_DAILY, …)` → 前台/后台时长；
-- `NetworkStatsManager.queryStatsForDevice(transport, …)` → 分 App 流量（部分 ROM 不给普通应用读，会降级）；
+- `NetworkStatsManager.queryStatsForUid(uid, begin, end)` → 分 App 流量（部分 ROM 不给普通应用读，会降级）；
+  （原来的 `queryStatsForDevice()` 从 API 29 起废弃，新版 SDK 里已经取不到，官方替代就是按 UID 查）；
 - `PackageManager` → 权限声明与授予状态。
 
 ## 为什么自己定义事件枚举

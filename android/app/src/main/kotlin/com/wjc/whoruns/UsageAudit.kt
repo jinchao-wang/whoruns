@@ -8,8 +8,6 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Process
 import java.util.concurrent.TimeUnit
@@ -66,7 +64,7 @@ object UsageAudit {
                 ?: return false
             val now = System.currentTimeMillis()
             val stats = manager.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAY,
+                UsageStatsManager.INTERVAL_DAILY,
                 now - TimeUnit.DAYS.toMillis(2),
                 now,
             )
@@ -91,14 +89,13 @@ object UsageAudit {
         val evidence = AuditClassifier.classify(rawEvents)
 
         val usage = readUsage(usageManager, begin, now)
-        val traffic = readTraffic(context, begin, now)
+        val uidByPackage = uidsOf(context, usage.keys)
+        val traffic = readTraffic(context, begin, now, uidByPackage)
         val selfPackage = context.packageName
 
         val packages = LinkedHashSet<String>()
         packages.addAll(usage.keys)
         packages.addAll(evidence.map { it.packageName })
-        // 流量表的键是 "cell:包名" / "wifi:包名"，这里只取包名。
-        packages.addAll(traffic.keys.map { it.substringAfter(':') })
         // 有后台定位权限的 App 也列出来：哪怕这段时间没用过，
         // 用户关心的就是「谁有这个权限」。
         packages.addAll(findBackgroundLocationApps(context))
@@ -108,8 +105,7 @@ object UsageAudit {
             if (pkg == selfPackage) continue
             val info = usage[pkg]
             val pkgEvidence = evidence.filter { it.packageName == pkg }
-            val cellBytes = traffic["cell:$pkg"] ?: 0L
-            val wifiBytes = traffic["wifi:$pkg"] ?: 0L
+            val trafficBytes = traffic[pkg]
             val hasBgLocation = hasDeclaredBackgroundLocation(context, pkg)
             val grantedBgLocation = isBackgroundLocationGranted(context, pkg)
 
@@ -119,8 +115,8 @@ object UsageAudit {
                     "label" to appLabel(context, pkg),
                     "foregroundMillis" to (info?.foregroundMillis ?: 0L),
                     "backgroundMillis" to (info?.backgroundMillis ?: 0L),
-                    "trafficBytes" to if (cellBytes > 0) cellBytes else -1L,
-                    "wifiBytes" to wifiBytes,
+                    // -1 表示这台系统读不到分 App 流量（不是 0 流量）。
+                    "trafficBytes" to (trafficBytes ?: -1L),
                     "hasBackgroundLocation" to hasBgLocation,
                     "backgroundLocationGranted" to grantedBgLocation,
                     "isSystemApp" to isSystemApp(context, pkg),
@@ -141,7 +137,7 @@ object UsageAudit {
             "scannedAt" to now,
             "rangeStart" to begin,
             "rangeEnd" to now,
-            "trafficAvailable" to traffic.keys.any { it.startsWith("cell:") },
+            "trafficAvailable" to traffic.isNotEmpty(),
             "apps" to apps,
         )
     }
@@ -257,46 +253,61 @@ object UsageAudit {
     }
 
     /**
+     * 包名 -> UID。
+     *
+     * 流量是按 UID 统计的，所以要先拿到每个包的 UID。
+     * 一次 `getApplicationInfo` 就够，不用遍历所有应用。
+     */
+    private fun uidsOf(context: Context, packages: Collection<String>): Map<String, Int> {
+        val out = HashMap<String, Int>()
+        try {
+            val pm = context.packageManager
+            for (pkg in packages) {
+                try {
+                    val info = pm.getApplicationInfo(pkg, 0)
+                    out[pkg] = info.uid
+                } catch (t: Throwable) {
+                    // 拿不到就跳过这个 App。
+                }
+            }
+        } catch (t: Throwable) {
+            // 忽略
+        }
+        return out
+    }
+
+    /**
      * 分 App 的流量。
      *
-     * 返回值用 `cell:<包名>` / `wifi:<包名>` 做键：
-     * 移动数据才是用户真正在意的「偷跑流量」，WiFi 的单独记。
+     * 用的是 `queryStatsForUid(uid, begin, end)`：
+     * 一次查一个 UID 在这段时间里收发了多少字节（移动 + WiFi 合计）。
+     *
+     * 为什么不用 `queryStatsForDevice`：那个接口从 API 29 起就被标记废弃，
+     * 新版 SDK 里已经拿不到了，官方给的替代就是按 UID 查。
+     *
+     * 只有「这段时间真的活动过」的 App 才查，
+     * 免得为了几十兆流量发上百次 binder 调用。
      */
-    @Suppress("DEPRECATION")
-    private fun readTraffic(context: Context, begin: Long, end: Long): Map<String, Long> {
+    private fun readTraffic(
+        context: Context,
+        begin: Long,
+        end: Long,
+        uidByPackage: Map<String, Int>,
+    ): Map<String, Long> {
         val out = HashMap<String, Long>()
         try {
             val manager = context.getSystemService(Context.NETWORK_STATS_SERVICE) as? NetworkStatsManager
                 ?: return out
-            val packageManager = context.packageManager
-
-            val transports = listOf(
-                NetworkCapabilities.TRANSPORT_CELLULAR to "cell",
-                NetworkCapabilities.TRANSPORT_WIFI to "wifi",
-            )
-            for ((transport, prefix) in transports) {
-                val buckets = try {
-                    // minSdk 是 24，四参数版本从 API 24 就有。
-                    manager.queryStatsForDevice(transport, "", begin, end)
-                } catch (t: Throwable) {
-                    // 部分 ROM/系统版本不给普通应用读分应用流量，直接跳过。
-                    continue
-                }
-                val stats = buckets.usageStats
-                for (stat in stats) {
-                    val uid = stat.uid
-                    if (uid < 0) continue
-                    val bytes = stat.rxBytes + stat.txBytes
-                    if (bytes <= 0) continue
-                    val packages = try {
-                        packageManager.getPackagesForUid(uid)
-                    } catch (t: Throwable) {
-                        null
-                    } ?: continue
-                    for (pkg in packages) {
-                        val key = "$prefix:$pkg"
-                        out[key] = (out[key] ?: 0L) + bytes
+            for ((pkg, uid) in uidByPackage) {
+                try {
+                    val stats = manager.queryStatsForUid(uid, begin, end)
+                    var bytes = 0L
+                    for (bucket in stats.usageStats) {
+                        bytes += bucket.rxBytes + bucket.txBytes
                     }
+                    if (bytes > 0) out[pkg] = bytes
+                } catch (t: Throwable) {
+                    // 部分 ROM/系统版本不给普通应用读分应用流量，这个 App 就跳过。
                 }
             }
         } catch (t: Throwable) {

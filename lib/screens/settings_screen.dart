@@ -213,7 +213,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 4),
                     Text(
                       '采集的内容：各 App 的前台/后台时长、活动事件（何时被启动、'
-                      '是否抢焦点）、移动数据流量、各 App 的权限声明情况。\n'
+                      '是否抢焦点）、分 App 流量、各 App 的权限声明情况。\n'
                       '不采集：任何个人内容（短信、聊天、相册）、任何账号信息。\n'
                       '数据流向：不离开设备；只有你主动点导出时才会生成 CSV 文件。',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(

@@ -35,7 +35,7 @@ enum AuditSignal {
   lockScreenLaunch('息屏启动', '屏幕黑着的时候它就起来了'),
   focusSteal('抢占焦点', '压在别的 App 上面弹窗，把你拽走'),
   backgroundStay('后台驻留', '长时间待在后台不退出'),
-  dataUsage('流量偷跑', '消耗了移动数据'),
+  dataUsage('流量偷跑', '消耗了流量'),
   location('定位嫌疑', '有后台定位权限，而且一直在活动');
 
   const AuditSignal(this.label, this.hint);
@@ -128,7 +128,7 @@ class AppAudit {
   /// 压在别的 App 上面抢焦点（硬证据）。
   final int focusStealCount;
 
-  /// 移动数据字节数；-1 表示这台机器/这个系统版本拿不到。
+  /// 流量字节数（移动 + Wi-Fi 合计）；-1 表示这台机器/这个系统版本拿不到。
   final int trafficBytes;
 
   final bool hasBackgroundLocation;

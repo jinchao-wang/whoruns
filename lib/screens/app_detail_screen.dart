@@ -118,7 +118,7 @@ class AppDetailScreen extends StatelessWidget {
                   value: Fmt.duration(app.backgroundMillis),
                 ),
                 _FactRow(
-                  label: '移动流量',
+                  label: '流量（移动+Wi-Fi）',
                   value: app.trafficAvailable
                       ? Fmt.bytes(app.trafficBytes)
                       : '这台系统读不到',

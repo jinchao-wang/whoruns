@@ -50,10 +50,10 @@ Play Console 的问卷措辞会变，下面按**问题类型**给出建议答案
 > **建议答案：No（否）**
 >
 > **中文版：**
-> 否。本权限仅用于在本机展示各应用的前台/后台使用时长、活动事件时间和分应用移动数据流量。所有读取到的数据只保存在设备内存中，用于在本应用界面内生成审计结果与评分。本应用没有网络传输权限（未声明 `android.permission.INTERNET`），不含任何第三方统计或广告 SDK，不会将任何数据传输到设备之外。
+> 否。本权限仅用于在本机展示各应用的前台/后台使用时长、活动事件时间和分应用流量消耗（移动 + Wi-Fi 合计）。所有读取到的数据只保存在设备内存中，用于在本应用界面内生成审计结果与评分。本应用没有网络传输权限（未声明 `android.permission.INTERNET`），不含任何第三方统计或广告 SDK，不会将任何数据传输到设备之外。
 >
 > **English version:**
-> No. This permission is used only to display, on-device, each app's foreground/background usage time, activity event timestamps, and per-app mobile data usage. All data read stays in device memory and is used solely to render the audit results and scores inside this app. This app does not declare the `android.permission.INTERNET` permission and contains no third-party analytics or advertising SDK. No data is transmitted off the device.
+> No. This permission is used only to display, on-device, each app's foreground/background usage time, activity event timestamps, and per-app data usage (mobile + Wi-Fi combined). All data read stays in device memory and is used solely to render the audit results and scores inside this app. This app does not declare the `android.permission.INTERNET` permission and contains no third-party analytics or advertising SDK. No data is transmitted off the device.
 
 **问题类型 B：**「这个权限的使用是否受用户控制？」
 本权限是 Android 的特殊权限，系统不允许应用自行弹框授权，必须由用户在系统设置中手动开启。答案是**是，完全受用户控制**。
@@ -106,10 +106,10 @@ Play Console 的问卷措辞会变，下面按**问题类型**给出建议答案
 > **建议答案（用途说明）：**
 >
 > **中文版：**
-> 用于通过 `NetworkStatsManager.queryStatsForDevice()` 读取分应用的移动数据（`TRANSPORT_CELLULAR`）与 Wi-Fi（`TRANSPORT_WIFI`）流量消耗量，以便在审计结果中显示「该应用消耗了多少流量」。本应用不发起任何网络请求，不读取网络连接之外的内容。
+> 用于通过 `NetworkStatsManager.queryStatsForUid(uid, begin, end)` 读取各应用的流量消耗量（移动 + Wi-Fi 合计），以便在审计结果中显示「该应用消耗了多少流量」。本应用不发起任何网络请求，不读取网络连接之外的内容。
 >
 > **English version:**
-> Used with `NetworkStatsManager.queryStatsForDevice()` to read per-app mobile data (`TRANSPORT_CELLULAR`) and Wi-Fi (`TRANSPORT_WIFI`) consumption, so the audit report can show how much data each app used. The app makes no network requests and reads nothing beyond network usage counters.
+> Used with `NetworkStatsManager.queryStatsForUid(uid, begin, end)` to read per-app data consumption (mobile + Wi-Fi combined), so the audit report can show how much data each app used. The app makes no network requests and reads nothing beyond network usage counters.
 
 ---
 
@@ -148,7 +148,7 @@ Play Console 的问卷措辞会变，下面按**问题类型**给出建议答案
 > 枚举设备上全部已安装应用，以便逐一统计其用量并排序展示；同时读取各应用声明的权限与授予状态（特别是后台定位权限）。不用于广告或用户画像。
 >
 > **读取网络状态（`READ_NETWORK_STATE`）**
-> 读取分应用的移动数据与 Wi-Fi 流量消耗量，用于显示「流量偷跑」。不发起任何网络请求。
+> 读取分应用的流量消耗量（移动 + Wi-Fi 合计），用于显示「流量偷跑」。不发起任何网络请求。
 >
 > **发送通知（`POST_NOTIFICATIONS`）**
 > 在定时审计发现异常事件时发送本地通知提醒。
@@ -232,7 +232,7 @@ Play Console 里有一个「App 访问 / 审核备注」之类的字段，用来
   - 各 App 的前台/后台时长
   - 活动事件时间（何时被启动到前台、是否抢占焦点、是否在息屏状态下启动）
   - 屏幕亮灭事件
-  - 分 App 的移动数据流量（NetworkStatsManager）
+  - 分 App 的流量消耗（NetworkStatsManager，按 UID 查询）
 这些信息没有其他公开 API 可以获取。若没有该权限，应用将无法提供任何核心功能。
 
 【用户操作路径】
@@ -263,7 +263,7 @@ Play Console 里有一个「App 访问 / 审核备注」之类的字段，用来
   - PACKAGE_USAGE_STATS：读取用量事件与时长，用于生成审计结果（核心功能）
   - QUERY_ALL_PACKAGES：枚举全部已安装应用并读取其权限声明与授予状态，
     Android 11 起若不使用则只能看到极少数应用，审计结果会严重不完整
-  - READ_NETWORK_STATE：读取分 App 的移动数据流量消耗
+  - READ_NETWORK_STATE：读取分 App 的流量消耗
   - POST_NOTIFICATIONS：发现新的异常事件时发送本地通知提醒
   - RECEIVE_BOOT_COMPLETED：开机后重新注册定时审计闹钟
 
