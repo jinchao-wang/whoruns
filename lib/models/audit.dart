@@ -116,7 +116,7 @@ class AppAudit {
   /// 屏幕在前台的时长。
   final int foregroundMillis;
 
-  /// 待在后台的时长。
+  /// 待在后台的时长（只算屏幕亮着的时间）。
   final int backgroundMillis;
 
   /// 长时间没人操作手机，它却自己弹到了前台（线索级）。

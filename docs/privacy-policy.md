@@ -18,10 +18,10 @@
 
 | # | 收集的数据 | 使用的系统 API | 用来做什么 | 是否上传 |
 |---|---|---|---|---|
-| 1 | 各 App 的前台时长、后台时长 | `UsageStatsManager.queryUsageStats()` → `UsageStats.getTotalTimeInForeground()` / `getTotalTimeInBackground()` | 计算「后台驻留」时长，算偷跑指数 | 否 |
+| 1 | 各 App 的前台时长、后台时长 | 前台时长：`UsageStatsManager.queryUsageStats()` → `UsageStats.getTotalTimeInForeground()`；后台时长：由同一批活动事件自行推算，只统计屏幕亮着的时间（系统原有的后台时长接口在近几个 Android 版本里已被移除） | 计算「后台驻留」时长，算偷跑指数 | 否 |
 | 2 | 活动事件：某个 App 何时被启动到前台、是否抢了焦点、是否在息屏状态下启动 | `UsageStatsManager.queryEvents()` → `UsageEvents.Event`（事件类型 `ACTIVITY_STARTED` / `ACTIVITY_RESUMED` / `ACTIVITY_PAUSED` / `ACTIVITY_STOPPED` / `SCREEN_INTERACTIVE` / `SCREEN_NON_INTERACTIVE` / `USER_PRESENT` / `USER_UNLOCKED`） | 判定「息屏启动」「抢占焦点」这两类硬证据 | 否 |
 | 3 | 屏幕亮灭事件 | 同上，`SCREEN_INTERACTIVE` / `SCREEN_NON_INTERACTIVE` | 判断事件发生时屏幕是开还是关 | 否 |
-| 4 | 分 App 的流量消耗（移动 + Wi-Fi 合计，部分 ROM 读不到） | `NetworkStatsManager.queryStatsForUid(uid, begin, end)` | 计算「流量偷跑」 | 否 |
+| 4 | 分 App 的流量消耗（移动 + Wi-Fi 合计，部分 ROM 读不到） | `NetworkStatsManager.queryStatsForUid(uid, begin, end)`（运行时按名字反射调用，避免系统版本变动导致 App 无法安装） | 计算「流量偷跑」 | 否 |
 | 5 | 各 App 的**权限声明与授予状态**，尤其是后台定位权限 `ACCESS_BACKGROUND_LOCATION` | `PackageManager.getPackageInfo(package, PackageManager.GET_PERMISSIONS)`、`PackageManager.checkPermission()` | 标出哪些 App 持有「始终允许」的后台定位权限 | 否 |
 | 6 | 本 App 自己有没有拿到「使用情况访问权限」 | `AppOpsManager.unsafeCheckOpNoThrow("android:get_usage_stats", …)` | 判断能不能开始采集 | 否 |
 | 7 | 本机健康状态：电量、是否充电、存储余量、温度状态 | `BatteryManager`、`StatFs`、`PowerManager.getCurrentThermalStatus()` | 本机健康自检（iOS 版的主要功能） | 否 |

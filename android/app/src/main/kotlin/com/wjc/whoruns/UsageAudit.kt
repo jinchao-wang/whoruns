@@ -1,7 +1,6 @@
 package com.wjc.whoruns
 
 import android.app.AppOpsManager
-import android.app.usage.NetworkStatsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
@@ -89,6 +88,8 @@ object UsageAudit {
         val evidence = AuditClassifier.classify(rawEvents)
 
         val usage = readUsage(usageManager, begin, now)
+        // 后台时长自己算：系统那个 API（getTotalTimeInBackground）已经被移除了。
+        val background = AuditClassifier.backgroundMillis(rawEvents, now)
         val uidByPackage = uidsOf(context, usage.keys)
         val traffic = readTraffic(context, begin, now, uidByPackage)
         val selfPackage = context.packageName
@@ -114,7 +115,7 @@ object UsageAudit {
                     "package" to pkg,
                     "label" to appLabel(context, pkg),
                     "foregroundMillis" to (info?.foregroundMillis ?: 0L),
-                    "backgroundMillis" to (info?.backgroundMillis ?: 0L),
+                    "backgroundMillis" to (background[pkg] ?: 0L),
                     // -1 表示这台系统读不到分 App 流量（不是 0 流量）。
                     "trafficBytes" to (trafficBytes ?: -1L),
                     "hasBackgroundLocation" to hasBgLocation,
@@ -219,7 +220,7 @@ object UsageAudit {
         }
     }
 
-    /** 每个包的前台/后台时长。 */
+    /** 每个包的前台时长。后台时长由 [AuditClassifier.backgroundMillis] 从事件流算。 */
     private fun readUsage(
         manager: UsageStatsManager,
         begin: Long,
@@ -231,19 +232,11 @@ object UsageAudit {
             for (stat in stats) {
                 val pkg = stat.packageName ?: continue
                 val foreground = stat.totalTimeInForeground
-                val background = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    stat.totalTimeInBackground
-                } else {
-                    0L
-                }
                 val existing = out[pkg]
                 out[pkg] = if (existing == null) {
-                    UsageEntry(foreground, background)
+                    UsageEntry(foreground)
                 } else {
-                    UsageEntry(
-                        existing.foregroundMillis + foreground,
-                        existing.backgroundMillis + background,
-                    )
+                    UsageEntry(existing.foregroundMillis + foreground)
                 }
             }
         } catch (t: Throwable) {
@@ -279,14 +272,15 @@ object UsageAudit {
     /**
      * 分 App 的流量。
      *
-     * 用的是 `queryStatsForUid(uid, begin, end)`：
-     * 一次查一个 UID 在这段时间里收发了多少字节（移动 + WiFi 合计）。
+     * ## 为什么用反射
      *
-     * 为什么不用 `queryStatsForDevice`：那个接口从 API 29 起就被标记废弃，
-     * 新版 SDK 里已经拿不到了，官方给的替代就是按 UID 查。
+     * 这一组 API 在 Android 各版本里改动频繁：
+     * `NetworkStatsManager.queryStatsForDevice()` 从 API 29 起废弃，在新 SDK 里已经取不到；
+     * `NetworkStatsManager` 本身还搬过家（`android.app.usage` → `android.net.netstats`）。
+     * 直接引用这些符号，编译期就会被 SDK 的公开面卡住。
      *
-     * 只有「这段时间真的活动过」的 App 才查，
-     * 免得为了几十兆流量发上百次 binder 调用。
+     * 所以这里**一个类型名都不写死**：运行时按名字找类和方法，找到就用，
+     * 找不到就降级成「读不到分 App 流量」。Dart 侧会明确显示读不到，不会假装是 0。
      */
     private fun readTraffic(
         context: Context,
@@ -295,25 +289,67 @@ object UsageAudit {
         uidByPackage: Map<String, Int>,
     ): Map<String, Long> {
         val out = HashMap<String, Long>()
-        try {
-            val manager = context.getSystemService(Context.NETWORK_STATS_SERVICE) as? NetworkStatsManager
-                ?: return out
-            for ((pkg, uid) in uidByPackage) {
-                try {
-                    val stats = manager.queryStatsForUid(uid, begin, end)
-                    var bytes = 0L
-                    for (bucket in stats.usageStats) {
-                        bytes += bucket.rxBytes + bucket.txBytes
-                    }
-                    if (bytes > 0) out[pkg] = bytes
-                } catch (t: Throwable) {
-                    // 部分 ROM/系统版本不给普通应用读分应用流量，这个 App 就跳过。
-                }
+        val service = context.getSystemService(Context.NETWORK_STATS_SERVICE) ?: return out
+        val managerClass = findClass(
+            "android.app.usage.NetworkStatsManager",
+            "android.net.netstats.NetworkStatsManager",
+        ) ?: return out
+        val method = try {
+            managerClass.methods.firstOrNull {
+                it.name == "queryStatsForUid" && it.parameterTypes.size == 3
             }
         } catch (t: Throwable) {
-            // 拿不到流量不算致命，其它维度照常。
+            null
+        } ?: return out
+
+        for ((pkg, uid) in uidByPackage) {
+            try {
+                val stats = method.invoke(service, uid, begin, end) ?: continue
+                val bytes = sumBucketBytes(stats)
+                if (bytes > 0) out[pkg] = bytes
+            } catch (t: Throwable) {
+                // 这个 UID 读不到就跳过。
+            }
         }
         return out
+    }
+
+    /** 按名字找类，第一个找到的返回。 */
+    private fun findClass(vararg names: String): Class<*>? {
+        for (name in names) {
+            try {
+                return Class.forName(name)
+            } catch (t: Throwable) {
+                // 试下一个。
+            }
+        }
+        return null
+    }
+
+    /** NetworkStats -> 所有 bucket 的收发字节之和。 */
+    private fun sumBucketBytes(stats: Any): Long {
+        var bytes = 0L
+        try {
+            val bucketsMethod =
+                stats.javaClass.methods.firstOrNull { it.name == "getUsageStats" } ?: return bytes
+            val buckets = bucketsMethod.invoke(stats) as? Collection<*> ?: return bytes
+            for (bucket in buckets) {
+                if (bucket == null) continue
+                bytes += longValue(bucket, "getRxBytes") + longValue(bucket, "getTxBytes")
+            }
+        } catch (t: Throwable) {
+            // 读不到就当没有。
+        }
+        return bytes
+    }
+
+    private fun longValue(target: Any, methodName: String): Long {
+        return try {
+            val method = target.javaClass.methods.firstOrNull { it.name == methodName } ?: return 0L
+            (method.invoke(target) as? Number)?.toLong() ?: 0L
+        } catch (t: Throwable) {
+            0L
+        }
     }
 
     /** 声明了后台定位权限、并且拿到了授权的 App。 */
@@ -390,9 +426,8 @@ object UsageAudit {
         EvidenceType.IDLE_SELF_LAUNCH -> "lead"
     }
 
-    /** 内部用的时长载体。 */
+    /** 内部用的时长载体。后台时长另有来源（从事件流算），这里只放系统给的量。 */
     private data class UsageEntry(
         val foregroundMillis: Long,
-        val backgroundMillis: Long,
     )
 }

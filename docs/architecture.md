@@ -57,10 +57,32 @@ utils/scoring.dart computeScore() → 偷跑指数 0-100
 
 另外两条采集线是独立的：
 
-- `UsageStatsManager.queryUsageStats(INTERVAL_DAILY, …)` → 前台/后台时长；
-- `NetworkStatsManager.queryStatsForUid(uid, begin, end)` → 分 App 流量（部分 ROM 不给普通应用读，会降级）；
-  （原来的 `queryStatsForDevice()` 从 API 29 起废弃，新版 SDK 里已经取不到，官方替代就是按 UID 查）；
+- `UsageStatsManager.queryUsageStats(INTERVAL_DAILY, …)` → 前台时长；
+- 后台时长**自己算**（见下）；系统原来的 `UsageStats.getTotalTimeInBackground()`
+  在近几个 Android 版本里被移除了，与其跟着一版版 SDK 修补，不如从事件流推算；
 - `PackageManager` → 权限声明与授予状态。
+
+### 后台时长怎么算
+
+从同一批活动事件推算，只统计**屏幕亮着**的时间：
+
+- App 让出前台（`ACTIVITY_PAUSED` / `ACTIVITY_STOPPED`，或被别的 App 顶替）→ 进入后台；
+- 屏幕亮着的每一段时间，计入当时所有在后台的 App；
+- 息屏期间不计入——屏幕黑着的时候所有 App 都在后台，算进去每个 App 都是「后台 12 小时」，
+  这个指标就没有意义了。这跟系统自己的口径一致。
+
+这段逻辑同样放在纯 Kotlin 的分类器里（`AuditClassifier.backgroundMillis`），
+所以有单测钉住口径。
+
+### 流量：为什么用反射
+
+`NetworkStatsManager` 这一组 API 变动频繁：`queryStatsForDevice()` 从 API 29 起废弃、
+在新版 SDK 里已经取不到；`NetworkStatsManager` 本身还搬过家
+（`android.app.usage` → `android.net.netstats`）。
+
+直接引用这些符号，编译期就会被 SDK 的公开面卡住（第一次 CI 构建就是这么失败的）。
+所以流量这一路**一个类型名都不写死**：运行时按名字找类和方法，找不到就降级成
+「读不到分 App 流量」，Dart 侧会明确显示读不到，不会假装是 0。
 
 ## 为什么自己定义事件枚举
 

@@ -77,7 +77,6 @@ object AuditClassifier {
         val sorted = events.sortedBy { it.timestamp }
         val out = ArrayList<EvidenceRecord>()
         val seen = HashSet<String>()
-
         var foreground: String? = null
         var foregroundPaused = false
         var screenOn = true
@@ -182,6 +181,78 @@ object AuditClassifier {
             }
         }
 
+        return out
+    }
+
+    /**
+     * 每个 App「亮屏期间待在后台」的时长。
+     *
+     * ## 为什么自己算
+     *
+     * 系统以前提供 `UsageStats.getTotalTimeInBackground()`，
+     * 但它在近几个 Android 版本里被移除了（连同 `UsageStatsManager.INTERVAL_DAY` 这些）。
+     * 与其跟着一版版 SDK 修补，不如从事件流自己算 —— 反正事件流我们已经在读了。
+     *
+     * ## 口径
+     *
+     * 只算**屏幕亮着**的时间：屏幕黑着的时候，待在后台是所有 App 的常态，
+     * 算进去的话每个 App 都是「后台 12 小时」，这个指标就没意义了。
+     * 这跟系统自己的口径一致（系统也只统计设备在使用期间的后台时间）。
+     *
+     * @param end 统计区间的右端点（通常是「现在」）。
+     * @return 包名 -> 后台时长（毫秒）。
+     */
+    fun backgroundMillis(events: List<RawEvent>, end: Long): Map<String, Long> {
+        val sorted = events.sortedBy { it.timestamp }
+        val out = HashMap<String, Long>()
+        val inBackground = HashSet<String>()
+        var foreground: String? = null
+        var screenOn = true
+        var screenOnSince = 0L
+
+        // 屏幕亮着的那段时间，所有当时在后台的 App 都要记上一笔。
+        fun closeScreenOn(at: Long) {
+            if (!screenOn) return
+            val duration = at - screenOnSince
+            if (duration <= 0) return
+            for (pkg in inBackground) {
+                out[pkg] = (out[pkg] ?: 0L) + duration
+            }
+        }
+
+        for (event in sorted) {
+            when (event.type) {
+                AuditEventType.SCREEN_INTERACTIVE -> {
+                    screenOn = true
+                    screenOnSince = event.timestamp
+                }
+
+                AuditEventType.SCREEN_NON_INTERACTIVE -> {
+                    closeScreenOn(event.timestamp)
+                    screenOn = false
+                }
+
+                AuditEventType.ACTIVITY_RESUMED -> {
+                    val previous = foreground
+                    if (previous != null && previous != event.packageName) {
+                        // 前一个 App 让出前台，开始待在后台。
+                        inBackground.add(previous)
+                    }
+                    inBackground.remove(event.packageName)
+                    foreground = event.packageName
+                }
+
+                AuditEventType.ACTIVITY_PAUSED, AuditEventType.ACTIVITY_STOPPED -> {
+                    if (event.packageName == foreground) {
+                        inBackground.add(event.packageName)
+                        foreground = null
+                    }
+                }
+
+                else -> Unit
+            }
+        }
+        closeScreenOn(end)
         return out
     }
 }

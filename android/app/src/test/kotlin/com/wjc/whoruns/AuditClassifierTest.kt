@@ -141,3 +141,52 @@ class AuditClassifierTest {
         assertEquals(EvidenceType.FOCUS_STEAL, hit!!.type)
     }
 }
+
+class BackgroundTimeTest {
+
+    @Test
+    fun `亮屏期间在后台的时间要算进去`() {
+        val background = AuditClassifier.backgroundMillis(
+            listOf(
+                RawEvent(AuditEventType.SCREEN_INTERACTIVE, "system", 0),
+                RawEvent(AuditEventType.ACTIVITY_RESUMED, "com.a", 1_000),
+                RawEvent(AuditEventType.ACTIVITY_PAUSED, "com.a", 2_000),
+                RawEvent(AuditEventType.SCREEN_NON_INTERACTIVE, "system", 3_000),
+                RawEvent(AuditEventType.SCREEN_INTERACTIVE, "system", 10_000),
+            ),
+            end = 20_000,
+        )
+
+        // 亮屏时段 0-3 秒（3 秒）+ 10-20 秒（10 秒）
+        assertEquals(13_000L, background["com.a"])
+    }
+
+    @Test
+    fun `息屏那段时间不算后台时长`() {
+        val background = AuditClassifier.backgroundMillis(
+            listOf(
+                RawEvent(AuditEventType.SCREEN_INTERACTIVE, "system", 0),
+                RawEvent(AuditEventType.ACTIVITY_RESUMED, "com.a", 1_000),
+                RawEvent(AuditEventType.ACTIVITY_PAUSED, "com.a", 2_000),
+                RawEvent(AuditEventType.SCREEN_NON_INTERACTIVE, "system", 3_000),
+            ),
+            end = 100_000,
+        )
+
+        // 只有亮屏那 3 秒算数，后面息屏的 97 秒不算。
+        assertEquals(3_000L, background["com.a"])
+    }
+
+    @Test
+    fun `在前台的时间不算后台时间`() {
+        val background = AuditClassifier.backgroundMillis(
+            listOf(
+                RawEvent(AuditEventType.SCREEN_INTERACTIVE, "system", 0),
+                RawEvent(AuditEventType.ACTIVITY_RESUMED, "com.a", 1_000),
+            ),
+            end = 20_000,
+        )
+
+        assertTrue(background["com.a"] == null)
+    }
+}
