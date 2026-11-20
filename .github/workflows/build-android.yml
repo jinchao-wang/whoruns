@@ -2,14 +2,12 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
+  # 主干每次推送都构建。
+  # 早先按路径过滤（只改 docs/ 就不构建），
+  # 结果是「推了代码没动静」，容易让人以为自动构建坏了 —— 这里统一按分支触发。
   push:
-    paths:
-      - 'android/**'
-      - 'lib/**'
-      - 'test/**'
-      - 'tool/**'
-      - 'pubspec.yaml'
-      - '.github/workflows/build-android.yml'
+    branches:
+      - main
 
 permissions:
   contents: read
