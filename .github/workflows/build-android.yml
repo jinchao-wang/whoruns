@@ -22,6 +22,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      # YAML 语法错的时候，GitHub 不会报错，只会把工作流名字显示成文件路径，
+      # 很容易被忽略过去。这里先自己检一遍。
+      - name: Check workflow syntax
+        run: ruby -ryaml -e 'Dir[File.join(".github", "workflows", "*.yml")].each { |f| YAML.load_file(f); puts "OK #{f}" }'
+
       - name: Check out source
         uses: actions/checkout@v4
 
@@ -92,22 +97,11 @@ jobs:
           cd android
           ./gradlew :app:testDebugUnitTest -I ci-junit.gradle --console=plain > native-test.txt 2>&1 && code=0 || code=$?
           cat native-test.txt
-          # 关键报错写进 Job Summary，同时发成 commit comment：
-          # 公开 API 就能读到，不用翻网页日志。
-          {
-            echo "### Android native unit tests"
-            echo '```'
-            grep -E "^e: |error:|FAILED|What went wrong|Execution failed|tests completed" native-test.txt | head -40
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^e: |error:|FAILED|What went wrong|Execution failed|tests completed" native-test.txt | head -40 > native-errors.txt || true
+          echo "### Android native unit tests" >> "$GITHUB_STEP_SUMMARY" || true
+          cat native-errors.txt >> "$GITHUB_STEP_SUMMARY" || true
           if [ "$code" != "0" ]; then
-            body=$(grep -E "^e: |error:|FAILED|What went wrong|Execution failed|tests completed" native-test.txt | head -40)
-            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-              -f body="Android 原生单测失败，编译/测试报错如下：
-
-\`\`\`
-$body
-\`\`\`" || echo "评论发送失败，不影响构建结论"
+            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -F body=@native-errors.txt || echo "comment failed"
           fi
           msg=$(tail -c 3000 native-test.txt | tr '\n\r' '  ' | sed 's/%/%25/g')
           echo "::error title=android native test::${msg}"
