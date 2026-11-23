@@ -98,7 +98,15 @@ flutter test
 
 # 原生侧判定逻辑的 JVM 单测
 cd android && ./gradlew :app:testDebugUnitTest -I ci-junit.gradle
+
+# 两个自查脚本（不需要 Android SDK，CI 出问题时先跑它们）
+python tool/check_workflows.py     # 校验 .github/workflows 的 YAML 语法
+python tool/classifier_probe.py    # 用 Python 复刻一遍分类器，跑一遍边界用例
 ```
+
+> `tool/check_workflows.py` 值得说一句：GitHub 对工作流 YAML 语法错的处理很隐蔽，
+> 不报错，只把工作流名字显示成文件路径，job 也不创建 —— 看起来像「没触发」。
+> 两个工作流里都加了 YAML 语法自检步骤，就是为了第一时间暴露这种问题。
 
 ### 仓库结构
 
