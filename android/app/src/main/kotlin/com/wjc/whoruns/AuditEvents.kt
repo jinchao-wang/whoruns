@@ -81,6 +81,7 @@ object AuditClassifier {
         var foregroundPaused = false
         var screenOn = true
         var screenOnAt = 0L
+        var sawScreenOn = false
         var unlockedAfterScreenOn = false
         var lastUserActiveAt = 0L
 
@@ -98,6 +99,10 @@ object AuditClassifier {
                 AuditEventType.SCREEN_INTERACTIVE -> {
                     screenOn = true
                     screenOnAt = event.timestamp
+                    // 单独记一个「确实看到过亮屏事件」的标志：
+                    // 不能拿 screenOnAt > 0 来判断，
+                    // 因为亮屏事件的时间戳完全可能是 0（系统启动时间基准）。
+                    sawScreenOn = true
                     unlockedAfterScreenOn = false
                     lastUserActiveAt = event.timestamp
                 }
@@ -145,7 +150,7 @@ object AuditClassifier {
                     if (event.packageName != fg) {
                         val wokeScreen = screenOn &&
                             !unlockedAfterScreenOn &&
-                            screenOnAt > 0L &&
+                            sawScreenOn &&
                             event.timestamp - screenOnAt <= SCREEN_WAKE_WINDOW_MS
 
                         when {
