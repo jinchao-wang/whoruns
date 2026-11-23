@@ -22,13 +22,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      # YAML 语法错的时候，GitHub 不会报错，只会把工作流名字显示成文件路径，
-      # 很容易被忽略过去。这里先自己检一遍。
-      - name: Check workflow syntax
-        run: ruby -ryaml -e 'Dir[File.join(".github", "workflows", "*.yml")].each { |f| YAML.load_file(f); puts "OK #{f}" }'
-
       - name: Check out source
         uses: actions/checkout@v4
+
+      # YAML 语法错的时候，GitHub 不会报错，只会把工作流名字显示成文件路径，
+      # 很容易被忽略过去。这里先自己检一遍。
+      # 注意：命令里不能出现「空格 + #」，YAML 会当成注释把后半截截掉。
+      - name: Check workflow syntax
+        run: ruby -ryaml -e 'Dir[File.join(".github", "workflows", "*.yml")].each { |f| YAML.load_file(f); puts "OK " + f }'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
